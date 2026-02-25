@@ -1,10 +1,10 @@
-# waku-a2a
+# logos-messaging-a2a
 
 **A2A (Agent2Agent) protocol over Waku decentralized transport.**
 
 Google's [A2A protocol](https://github.com/google/A2A) defines a standard for agent-to-agent communication — Agent Cards, Tasks, Messages, and Parts. But it assumes HTTP transport: agents need stable endpoints, centralized discovery, and are vulnerable to censorship.
 
-**waku-a2a** replaces HTTP with [Waku](https://waku.org/), a decentralized pub/sub network. This gives you A2A semantics with censorship resistance, no central registry, and no need for stable endpoints.
+**logos-messaging-a2a** replaces HTTP with [Waku](https://waku.org/), a decentralized pub/sub network. This gives you A2A semantics with censorship resistance, no central registry, and no need for stable endpoints.
 
 ## Why not HTTP?
 
@@ -33,7 +33,7 @@ Waku is fire-and-forget — no delivery guarantees. For agent tasks, we need rel
 waku-a2a implements a **minimal SDS** (Scalable Data Sync) inspired layer:
 
 - Each message has a UUID
-- Sender polls for ACK on `/waku-a2a/1/ack/{message_id}/proto`
+- Sender polls for ACK on `/logos-messaging-a2a/1/ack/{message_id}/proto`
 - Receiver sends ACK after processing
 - No ACK within 10s → retransmit (up to 3 times)
 - Deduplication via message ID tracking
@@ -46,9 +46,9 @@ See [Issue #2](docs/issues.md) for the full SDS spec migration plan.
 ┌─────────────────────────────────────────────────────────────┐
 │                    Waku Relay Network                        │
 │                                                             │
-│  /waku-a2a/1/discovery/proto      AgentCard broadcasts      │
-│  /waku-a2a/1/task/{pubkey}/proto  Task inbox per agent      │
-│  /waku-a2a/1/ack/{msg_id}/proto   SDS acknowledgements      │
+│  /logos-messaging-a2a/1/discovery/proto      AgentCard broadcasts      │
+│  /logos-messaging-a2a/1/task/{pubkey}/proto  Task inbox per agent      │
+│  /logos-messaging-a2a/1/ack/{msg_id}/proto   SDS acknowledgements      │
 │                                                             │
 └─────────┬────────────────┬────────────────┬─────────────────┘
           │                │                │
@@ -70,7 +70,7 @@ See [docs/architecture.md](docs/architecture.md) for the full stack diagram.
 ## Project Structure
 
 ```
-waku-a2a/
+logos-messaging-a2a/
   Cargo.toml                # workspace root
   crates/
     waku-a2a-core/          # A2A types: AgentCard, Task, Message, Part, TaskState
@@ -138,21 +138,21 @@ Done! Both agents communicated via in-memory Waku transport.
 cargo run --example echo_agent
 
 # Terminal 2: send a task to it
-cargo run --bin waku-a2a -- task send \
+cargo run --bin logos-messaging-a2a -- task send \
   --to <agent_pubkey> \
   --text "Hello, what can you do?"
 
 # Terminal 2: discover agents
-cargo run --bin waku-a2a -- agent discover
+cargo run --bin logos-messaging-a2a -- agent discover
 ```
 
 ### CLI Reference
 
 ```bash
-waku-a2a agent run --name "echo" --capabilities text
-waku-a2a agent discover
-waku-a2a task send --to <pubkey> --text "Hello"
-waku-a2a task status --id <uuid>
+logos-messaging-a2a agent run --name "echo" --capabilities text
+logos-messaging-a2a agent discover
+logos-messaging-a2a task send --to <pubkey> --text "Hello"
+logos-messaging-a2a task status --id <uuid>
 ```
 
 ## A2A Protocol Types
