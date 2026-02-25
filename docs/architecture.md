@@ -1,4 +1,4 @@
-# waku-a2a Architecture
+# logos-messaging-a2a Architecture
 
 ## Full Stack Diagram
 
@@ -7,7 +7,7 @@
 │                        Application Layer                             │
 │                                                                      │
 │  ┌──────────────┐   ┌──────────────┐   ┌──────────────┐            │
-│  │  waku-a2a-cli│   │  echo_agent  │   │  ping_pong   │            │
+│  │  logos-messaging-a2a-cli│   │  echo_agent  │   │  ping_pong   │            │
 │  │  (CLI binary) │   │  (example)   │   │  (example)   │            │
 │  └──────┬───────┘   └──────┬───────┘   └──────┬───────┘            │
 │         │                  │                   │                     │
@@ -67,9 +67,9 @@
 │  │              Waku Relay (pub/sub)                        │         │
 │  │                                                         │         │
 │  │  Content Topics:                                        │         │
-│  │  /waku-a2a/1/discovery/proto     AgentCard broadcasts   │         │
-│  │  /waku-a2a/1/task/{pubkey}/proto Task inbox per agent   │         │
-│  │  /waku-a2a/1/ack/{msg_id}/proto  SDS acknowledgements   │         │
+│  │  /logos-messaging-a2a/1/discovery/proto     AgentCard broadcasts   │         │
+│  │  /logos-messaging-a2a/1/task/{pubkey}/proto Task inbox per agent   │         │
+│  │  /logos-messaging-a2a/1/ack/{msg_id}/proto  SDS acknowledgements   │         │
 │  │                                                         │         │
 │  └─────────────────────────────────────────────────────────┘         │
 │                                                                      │
@@ -80,7 +80,7 @@
 └──────────────────────────────────────────────────────────────────────┘
 ```
 
-## A2A Types (waku-a2a-core)
+## A2A Types (logos-messaging-a2a-core)
 
 ```
 AgentCard
@@ -132,9 +132,9 @@ Agent A                    Waku Network                  Agent B
 ## Crate Dependency Graph
 
 ```
-waku-a2a (root)
-├── waku-a2a-core          (no internal deps)
-├── waku-a2a-transport     (no internal deps)
-├── waku-a2a-node          (depends on core + transport)
-└── waku-a2a-cli           (depends on core + transport + node)
+logos-messaging-a2a (root)
+├── logos-messaging-a2a-core          (no internal deps)
+├── logos-messaging-a2a-transport     (no internal deps)
+├── logos-messaging-a2a-node          (depends on core + transport)
+└── logos-messaging-a2a-cli           (depends on core + transport + node)
 ```

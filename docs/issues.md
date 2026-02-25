@@ -1,6 +1,6 @@
 # Follow-up Issues
 
-Pre-written GitHub issues for the waku-a2a project. File these after the v0.1 prototype is stable.
+Pre-written GitHub issues for the logos-messaging-a2a project. File these after the v0.1 prototype is stable.
 
 ---
 
@@ -98,7 +98,7 @@ Current discovery relies on ephemeral Waku messages — if no agents are broadca
 - [ ] Define LEZ program interface for agent registration
 - [ ] Implement `LezRegistryTransport` that reads AgentCards from chain
 - [ ] Hybrid discovery: check LEZ first, fall back to Waku broadcast
-- [ ] CLI command: `waku-a2a agent register` (writes to LEZ)
+- [ ] CLI command: `logos-messaging-a2a agent register` (writes to LEZ)
 
 **Link:** https://github.com/jimmy-claw/lez-registry
 
@@ -108,16 +108,16 @@ Current discovery relies on ephemeral Waku messages — if no agents are broadca
 
 **Labels:** `enhancement`, `integration`, `logos-core`
 
-Package waku-a2a-node as a Logos Core `IComponent` plugin for fleet management via the desktop app.
+Package logos-messaging-a2a-node as a Logos Core `IComponent` plugin for fleet management via the desktop app.
 
 **Context:**
-Logos Core uses a plugin architecture where `.so` modules implement `IComponent`. A waku-a2a plugin would:
+Logos Core uses a plugin architecture where `.so` modules implement `IComponent`. A logos-messaging-a2a plugin would:
 - Manage a fleet of agents from the desktop UI
 - Expose agent status, task history, discovery via QML
 - Integrate with Logos Core's existing Waku stack
 
 **Tasks:**
-- [ ] Define `IComponent` interface for waku-a2a
+- [ ] Define `IComponent` interface for logos-messaging-a2a
 - [ ] Expose `WakuA2ANode` lifecycle via C FFI
 - [ ] Create QML UI for agent management
 - [ ] Integration tests with Logos Core runtime
@@ -131,7 +131,7 @@ Logos Core uses a plugin architecture where `.so` modules implement `IComponent`
 Expose Waku-connected agents as MCP (Model Context Protocol) tools.
 
 **Context:**
-MCP is the standard for connecting AI models to external tools. An MCP bridge would make waku-a2a agents accessible from:
+MCP is the standard for connecting AI models to external tools. An MCP bridge would make logos-messaging-a2a agents accessible from:
 - Claude (via Claude Code or desktop)
 - Cursor
 - Any MCP-compatible AI client
