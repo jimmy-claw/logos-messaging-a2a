@@ -1,0 +1,43 @@
+[package]
+name = "waku-a2a"
+version = "0.1.0"
+edition = "2021"
+description = "A2A protocol over Waku decentralized transport"
+
+[workspace]
+resolver = "2"
+members = [
+    "crates/waku-a2a-core",
+    "crates/waku-a2a-transport",
+    "crates/waku-a2a-node",
+    "crates/waku-a2a-cli",
+]
+
+[workspace.dependencies]
+tokio = { version = "1", features = ["full"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+reqwest = { version = "0.12", features = ["json"] }
+uuid = { version = "1", features = ["v4"] }
+clap = { version = "4", features = ["derive"] }
+k256 = "0.13"
+hex = "0.4"
+anyhow = "1"
+async-trait = "0.1"
+
+[dependencies]
+waku-a2a-core = { path = "crates/waku-a2a-core" }
+waku-a2a-transport = { path = "crates/waku-a2a-transport" }
+waku-a2a-node = { path = "crates/waku-a2a-node" }
+tokio = { workspace = true }
+anyhow = { workspace = true }
+async-trait = { workspace = true }
+serde_json = { workspace = true }
+
+[[example]]
+name = "echo_agent"
+path = "examples/echo_agent.rs"
+
+[[example]]
+name = "ping_pong"
+path = "examples/ping_pong.rs"
