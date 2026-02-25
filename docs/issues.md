@@ -56,28 +56,25 @@ The current "minimal-SDS" provides:
 
 ---
 
-## Issue #3: Waku symmetric encryption for task privacy
+## Issue #3: Encryption for task privacy
 
 **Labels:** `enhancement`, `security`, `privacy`
 
-Encrypt task payloads with per-conversation symmetric keys derived via ECDH.
+**Status:** DONE — X25519+ChaCha20-Poly1305 stepping stone implemented in `waku-a2a-crypto` crate. Full migration to Logos Chat SDK (Double Ratchet) tracked as future work when Rust bindings are available.
 
-**Context:**
-Currently, all messages are plaintext JSON on Waku content topics. Anyone monitoring the relay network can read task contents.
+**What was implemented:**
+- `waku-a2a-crypto` crate: `AgentIdentity` (X25519 keypair), `SessionKey` (ECDH shared secret), `EncryptedPayload` (ChaCha20-Poly1305)
+- `IntroBundle` for out-of-band key exchange
+- `A2AEnvelope::EncryptedTask` variant for encrypted task payloads
+- `AgentCard.intro_bundle` field for advertising encryption support
+- `WakuA2ANode::new_encrypted()` constructor
+- CLI `--encrypt` flag and `agent bundle` command
+- Backward compatible: plaintext mode still works
 
-**Approach:**
-1. When Agent A wants to communicate with Agent B, perform ECDH key agreement:
-   - A uses their secp256k1 private key + B's public key → shared secret
-   - Derive a symmetric key via HKDF
-2. Encrypt task payloads with AES-256-GCM using the derived symmetric key
-3. Include a nonce/IV in the envelope
-4. Only the sender and recipient can decrypt
-
-**Tasks:**
-- [ ] Implement ECDH key derivation using `k256` crate
-- [ ] Add AES-256-GCM encryption/decryption for task payloads
-- [ ] Update `A2AEnvelope` to support encrypted variants
-- [ ] Key rotation strategy for long-running conversations
+**Future: Logos Chat SDK migration**
+- [ ] When Logos Chat SDK Rust bindings are available, replace X25519+ChaCha20-Poly1305 with Double Ratchet (Extended Triple DH)
+- [ ] Same conceptual model: `AgentIdentity` → Chat SDK identity, `IntroBundle` → Chat SDK prekey bundle
+- [ ] Key rotation / ratcheting for forward secrecy (not in current static ECDH)
 
 ---
 

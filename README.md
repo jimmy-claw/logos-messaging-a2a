@@ -67,19 +67,47 @@ Each agent:
 
 See [docs/architecture.md](docs/architecture.md) for the full stack diagram.
 
+## Encryption
+
+Task payloads can be encrypted end-to-end using **X25519 ECDH key agreement + ChaCha20-Poly1305 authenticated encryption**.
+
+**Current (stepping stone):** Static ECDH — each agent generates an X25519 keypair, performs Diffie-Hellman with the recipient's public key, and uses the shared secret as a ChaCha20-Poly1305 key. Random nonce per message.
+
+**Future:** [Logos Chat SDK](https://github.com/nicola/logos-chat-sdk) with Double Ratchet (Extended Triple DH) for forward secrecy. Same conceptual model — `AgentIdentity` maps to a Chat SDK identity, `IntroBundle` maps to a prekey bundle.
+
+### How to use encryption
+
+```bash
+# 1. Generate and print an IntroBundle (for sharing out-of-band)
+cargo run --bin waku-a2a -- agent bundle
+
+# 2. Run an agent with encryption enabled
+cargo run --bin waku-a2a -- agent run --name echo --encrypt
+
+# 3. Run the encrypted ping-pong demo (no nwaku needed)
+cargo run --example ping_pong -- --encrypt
+```
+
+When `--encrypt` is used:
+- Agent generates an X25519 keypair and advertises its `IntroBundle` in its `AgentCard`
+- Outgoing tasks to agents with an `IntroBundle` are encrypted via ECDH + ChaCha20-Poly1305
+- Incoming encrypted tasks are automatically decrypted
+- Agents without encryption still work (backward compatible — plaintext fallback)
+
 ## Project Structure
 
 ```
 logos-messaging-a2a/
   Cargo.toml                # workspace root
   crates/
+    waku-a2a-crypto/        # X25519+ChaCha20-Poly1305 encryption primitives
     waku-a2a-core/          # A2A types: AgentCard, Task, Message, Part, TaskState
     waku-a2a-transport/     # Transport trait + nwaku REST impl + minimal SDS
     waku-a2a-node/          # A2A node: announce, discover, send/receive tasks
     waku-a2a-cli/           # CLI: run agents, discover peers, send tasks
   examples/
-    echo_agent.rs           # Simple agent that echoes back messages
-    ping_pong.rs            # Two agents exchanging tasks (in-memory transport)
+    echo_agent.rs           # Simple agent that echoes back messages (--encrypt flag)
+    ping_pong.rs            # Two agents exchanging tasks (--encrypt for encrypted variant)
   docs/
     architecture.md         # ASCII diagram of the full stack
     issues.md               # Pre-written GitHub issues for follow-up work
@@ -149,10 +177,12 @@ cargo run --bin logos-messaging-a2a -- agent discover
 ### CLI Reference
 
 ```bash
-logos-messaging-a2a agent run --name "echo" --capabilities text
-logos-messaging-a2a agent discover
-logos-messaging-a2a task send --to <pubkey> --text "Hello"
-logos-messaging-a2a task status --id <uuid>
+waku-a2a agent run --name "echo" --capabilities text
+waku-a2a agent run --name "echo" --encrypt          # with encryption
+waku-a2a agent discover
+waku-a2a agent bundle                                # print IntroBundle JSON
+waku-a2a task send --to <pubkey> --text "Hello"
+waku-a2a task status --id <uuid>
 ```
 
 ## A2A Protocol Types
@@ -169,7 +199,7 @@ See [docs/issues.md](docs/issues.md) for pre-written GitHub issues:
 
 1. **logos-delivery-rust-bindings FFI** — replace nwaku REST with embedded libwaku
 2. **Full SDS protocol** — proper bloom filters, causal ordering, batch ACK
-3. **Symmetric encryption** — per-conversation ECDH-derived keys
+3. ~~**Symmetric encryption**~~ — **DONE:** X25519+ChaCha20-Poly1305 stepping stone. Future: Logos Chat SDK Double Ratchet
 4. **LEZ agent registry** — on-chain AgentCards for permanent discovery
 5. **Logos Core plugin** — `.so` module with QML agent fleet UI
 6. **MCP bridge** — expose agents as MCP tools for Claude, Cursor, etc.

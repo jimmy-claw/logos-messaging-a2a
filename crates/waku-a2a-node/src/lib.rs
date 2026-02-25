@@ -1,6 +1,7 @@
 use anyhow::{Context, Result};
 use k256::ecdsa::SigningKey;
 use waku_a2a_core::{topics, A2AEnvelope, AgentCard, Task};
+use waku_a2a_crypto::{AgentIdentity, IntroBundle};
 use waku_a2a_transport::sds::SdsTransport;
 use waku_a2a_transport::WakuTransport;
 
@@ -9,10 +10,12 @@ pub struct WakuA2ANode<T: WakuTransport> {
     pub card: AgentCard,
     transport: SdsTransport<T>,
     signing_key: SigningKey,
+    /// Optional X25519 identity for encrypted sessions.
+    identity: Option<AgentIdentity>,
 }
 
 impl<T: WakuTransport> WakuA2ANode<T> {
-    /// Create a new node with a random keypair.
+    /// Create a new node with a random keypair (no encryption).
     pub fn new(name: &str, description: &str, capabilities: Vec<String>, transport: T) -> Self {
         let signing_key = SigningKey::random(&mut rand_core());
         let public_key = hex::encode(
@@ -28,16 +31,53 @@ impl<T: WakuTransport> WakuA2ANode<T> {
             version: "0.1.0".to_string(),
             capabilities,
             public_key,
+            intro_bundle: None,
         };
 
         Self {
             card,
             transport: SdsTransport::new(transport),
             signing_key,
+            identity: None,
         }
     }
 
-    /// Create a node from an existing signing key.
+    /// Create a new node with encryption enabled.
+    pub fn new_encrypted(
+        name: &str,
+        description: &str,
+        capabilities: Vec<String>,
+        transport: T,
+    ) -> Self {
+        let signing_key = SigningKey::random(&mut rand_core());
+        let public_key = hex::encode(
+            signing_key
+                .verifying_key()
+                .to_encoded_point(true)
+                .as_bytes(),
+        );
+
+        let identity = AgentIdentity::generate();
+        let intro_bundle = IntroBundle::new(&identity.public_key_hex());
+
+        let card = AgentCard {
+            name: name.to_string(),
+            description: description.to_string(),
+            version: "0.1.0".to_string(),
+            capabilities,
+            public_key,
+            intro_bundle: Some(intro_bundle),
+        };
+
+        Self {
+            card,
+            transport: SdsTransport::new(transport),
+            signing_key,
+            identity: Some(identity),
+        }
+    }
+
+    /// Create a node from an existing signing key (no encryption).
     pub fn from_key(
         name: &str,
         description: &str,
@@ -58,12 +98,14 @@ impl<T: WakuTransport> WakuA2ANode<T> {
             version: "0.1.0".to_string(),
             capabilities,
             public_key,
+            intro_bundle: None,
         };
 
         Self {
             card,
             transport: SdsTransport::new(transport),
             signing_key,
+            identity: None,
         }
     }
 
@@ -75,6 +117,11 @@ impl<T: WakuTransport> WakuA2ANode<T> {
     /// Get the signing key (for testing or advanced use).
     pub fn signing_key(&self) -> &SigningKey {
         &self.signing_key
+    }
+
+    /// Get the encryption identity (if encryption is enabled).
+    pub fn identity(&self) -> Option<&AgentIdentity> {
+        self.identity.as_ref()
     }
 
     /// Broadcast this agent's card on the discovery topic.
@@ -110,10 +157,21 @@ impl<T: WakuTransport> WakuA2ANode<T> {
     }
 
     /// Send a task to another agent. Uses SDS for reliable delivery.
+    /// If both sides have encryption identities, the task is encrypted.
     pub async fn send_task(&self, task: &Task) -> Result<bool> {
+        self.send_task_to(task, None).await
+    }
+
+    /// Send a task, optionally encrypting if recipient has an intro bundle.
+    pub async fn send_task_to(
+        &self,
+        task: &Task,
+        recipient_card: Option<&AgentCard>,
+    ) -> Result<bool> {
         let topic = topics::task_topic(&task.to);
-        let envelope = A2AEnvelope::Task(task.clone());
-        let payload = serde_json::to_vec(&envelope).context("Failed to serialize task")?;
+
+        let envelope = self.maybe_encrypt_task(task, recipient_card)?;
+        let payload = serde_json::to_vec(&envelope).context("Failed to serialize envelope")?;
 
         self.transport
             .inner()
@@ -135,26 +193,64 @@ impl<T: WakuTransport> WakuA2ANode<T> {
     }
 
     /// Poll for incoming tasks addressed to this agent.
+    /// Automatically decrypts encrypted tasks if this node has an identity.
     pub async fn poll_tasks(&self) -> Result<Vec<Task>> {
         let topic = topics::task_topic(&self.card.public_key);
         self.transport.inner().subscribe(&topic).await?;
         let messages = self.transport.poll_dedup(&topic).await?;
         let mut tasks = Vec::new();
         for msg in messages {
-            if let Ok(A2AEnvelope::Task(task)) = serde_json::from_slice(&msg) {
-                // ACK the received task (SDS)
-                let _ = self.transport.send_ack(&task.id).await;
-                tasks.push(task);
+            if let Ok(envelope) = serde_json::from_slice::<A2AEnvelope>(&msg) {
+                match envelope {
+                    A2AEnvelope::Task(task) => {
+                        let _ = self.transport.send_ack(&task.id).await;
+                        tasks.push(task);
+                    }
+                    A2AEnvelope::EncryptedTask {
+                        encrypted,
+                        sender_pubkey,
+                    } => {
+                        if let Some(ref identity) = self.identity {
+                            match self.decrypt_task(identity, &sender_pubkey, &encrypted) {
+                                Ok(task) => {
+                                    let _ = self.transport.send_ack(&task.id).await;
+                                    tasks.push(task);
+                                }
+                                Err(e) => {
+                                    eprintln!("[node] Failed to decrypt task: {}", e);
+                                }
+                            }
+                        } else {
+                            eprintln!(
+                                "[node] Received encrypted task but no identity configured"
+                            );
+                        }
+                    }
+                    _ => {}
+                }
             }
         }
         Ok(tasks)
     }
 
     /// Respond to a task: send back a completed task with result.
+    /// If this node has an identity and the original sender included a pubkey,
+    /// the response is encrypted.
     pub async fn respond(&self, task: &Task, result_text: &str) -> Result<()> {
+        self.respond_to(task, result_text, None).await
+    }
+
+    /// Respond to a task, optionally encrypting to the sender.
+    pub async fn respond_to(
+        &self,
+        task: &Task,
+        result_text: &str,
+        sender_card: Option<&AgentCard>,
+    ) -> Result<()> {
         let response = task.respond(result_text);
         let topic = topics::task_topic(&response.to);
-        let envelope = A2AEnvelope::Task(response.clone());
+
+        let envelope = self.maybe_encrypt_task(&response, sender_card)?;
         let payload = serde_json::to_vec(&envelope)?;
 
         self.transport
@@ -171,6 +267,42 @@ impl<T: WakuTransport> WakuA2ANode<T> {
     pub async fn send_text(&self, to: &str, text: &str) -> Result<Task> {
         let task = Task::new(self.pubkey(), to, text);
         self.send_task(&task).await?;
+        Ok(task)
+    }
+
+    /// Encrypt a task if both sides have encryption identities.
+    fn maybe_encrypt_task(
+        &self,
+        task: &Task,
+        recipient_card: Option<&AgentCard>,
+    ) -> Result<A2AEnvelope> {
+        if let (Some(ref identity), Some(card)) = (&self.identity, recipient_card) {
+            if let Some(ref bundle) = card.intro_bundle {
+                let their_pubkey = AgentIdentity::parse_public_key(&bundle.agent_pubkey)?;
+                let session_key = identity.shared_key(&their_pubkey);
+                let task_json = serde_json::to_vec(task)?;
+                let encrypted = session_key.encrypt(&task_json)?;
+                return Ok(A2AEnvelope::EncryptedTask {
+                    encrypted,
+                    sender_pubkey: identity.public_key_hex(),
+                });
+            }
+        }
+        Ok(A2AEnvelope::Task(task.clone()))
+    }
+
+    /// Decrypt an encrypted task payload.
+    fn decrypt_task(
+        &self,
+        identity: &AgentIdentity,
+        sender_pubkey_hex: &str,
+        encrypted: &waku_a2a_crypto::EncryptedPayload,
+    ) -> Result<Task> {
+        let their_pubkey = AgentIdentity::parse_public_key(sender_pubkey_hex)?;
+        let session_key = identity.shared_key(&their_pubkey);
+        let plaintext = session_key.decrypt(encrypted)?;
+        let task: Task =
+            serde_json::from_slice(&plaintext).context("Failed to deserialize decrypted task")?;
         Ok(task)
     }
 }
@@ -239,6 +371,21 @@ mod tests {
         assert!(!node.pubkey().is_empty());
         // secp256k1 compressed pubkey is 33 bytes = 66 hex chars
         assert_eq!(node.pubkey().len(), 66);
+        assert!(node.identity().is_none());
+        assert!(node.card.intro_bundle.is_none());
+    }
+
+    #[test]
+    fn test_encrypted_node_creation() {
+        let transport = MockTransport::new();
+        let node =
+            WakuA2ANode::new_encrypted("test", "test agent", vec!["text".into()], transport);
+        assert!(node.identity().is_some());
+        assert!(node.card.intro_bundle.is_some());
+        let bundle = node.card.intro_bundle.as_ref().unwrap();
+        assert_eq!(bundle.version, "1.0");
+        // X25519 pubkey = 32 bytes = 64 hex chars
+        assert_eq!(bundle.agent_pubkey.len(), 64);
     }
 
     #[tokio::test]
@@ -272,6 +419,7 @@ mod tests {
             version: "0.1.0".to_string(),
             capabilities: vec!["code".to_string()],
             public_key: "02deadbeef".to_string(),
+            intro_bundle: None,
         };
         let envelope = A2AEnvelope::AgentCard(other_card.clone());
         let payload = serde_json::to_vec(&envelope).unwrap();

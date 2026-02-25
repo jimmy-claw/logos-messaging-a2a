@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+waku-a2a-crypto = { path = "../waku-a2a-crypto" }
 waku-a2a-core = { path = "../waku-a2a-core" }
 waku-a2a-transport = { path = "../waku-a2a-transport" }
 tokio = { workspace = true }

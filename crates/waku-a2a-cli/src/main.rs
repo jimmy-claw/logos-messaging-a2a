@@ -39,9 +39,14 @@ enum AgentAction {
         /// Comma-separated capabilities
         #[arg(long, default_value = "text")]
         capabilities: String,
+        /// Enable X25519+ChaCha20-Poly1305 encryption
+        #[arg(long)]
+        encrypt: bool,
     },
     /// Discover agents on the network
     Discover,
+    /// Print this agent's IntroBundle (for sharing out-of-band)
+    Bundle,
 }
 
 #[derive(Subcommand)]
@@ -70,11 +75,25 @@ async fn main() -> Result<()> {
 
     match cli.command {
         Commands::Agent { action } => match action {
-            AgentAction::Run { name, capabilities } => {
-                let caps: Vec<String> = capabilities.split(',').map(|s| s.trim().to_string()).collect();
-                let node = WakuA2ANode::new(&name, &format!("{} agent", name), caps, transport);
+            AgentAction::Run {
+                name,
+                capabilities,
+                encrypt,
+            } => {
+                let caps: Vec<String> =
+                    capabilities.split(',').map(|s| s.trim().to_string()).collect();
+                let node = if encrypt {
+                    WakuA2ANode::new_encrypted(&name, &format!("{} agent", name), caps, transport)
+                } else {
+                    WakuA2ANode::new(&name, &format!("{} agent", name), caps, transport)
+                };
                 println!("Agent: {}", node.card.name);
                 println!("Pubkey: {}", node.pubkey());
+                if encrypt {
+                    let bundle = node.card.intro_bundle.as_ref().unwrap();
+                    println!("Encryption: ENABLED (X25519+ChaCha20-Poly1305)");
+                    println!("X25519 pubkey: {}", bundle.agent_pubkey);
+                }
                 println!("Listening for tasks...\n");
 
                 // Announce on startup
@@ -120,6 +139,9 @@ async fn main() -> Result<()> {
                                 println!("  Description: {}", card.description);
                                 println!("  Capabilities: {}", card.capabilities.join(", "));
                                 println!("  Pubkey: {}", card.public_key);
+                                if let Some(ref bundle) = card.intro_bundle {
+                                    println!("  Encryption: YES (X25519: {})", bundle.agent_pubkey);
+                                }
                                 println!();
                             }
                         }
@@ -128,6 +150,12 @@ async fn main() -> Result<()> {
                         eprintln!("Discovery failed (is nwaku running?): {}", e);
                     }
                 }
+            }
+            AgentAction::Bundle => {
+                let node = WakuA2ANode::new_encrypted("bundle-gen", "temporary", vec![], transport);
+                let bundle = node.card.intro_bundle.as_ref().unwrap();
+                let json = serde_json::to_string_pretty(bundle)?;
+                println!("{}", json);
             }
         },
         Commands::Task { action } => match action {
